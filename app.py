@@ -1,14 +1,37 @@
 import streamlit as st
 import pandas as pd
 import random
+import io
+from gtts import gTTS
+import json
+import os
+
+# 파일 경로
+STARRED_WORDS_FILE = "starred_words.json"
 
 # CSV 파일 불러오기
 try:
     df = pd.read_csv('toeic_words.csv')
-    df = df.fillna('')  # NaN 값을 빈 문자열로 채우기
+    df = df.fillna('')
 except FileNotFoundError:
     st.error("`toeic_words.csv` 파일을 찾을 수 없습니다.")
     st.stop()
+
+# 별표 단어 목록을 파일에서 불러오는 함수
+def load_starred_words():
+    # --- 수정된 부분 ---
+    if os.path.exists(STARRED_WORDS_FILE):
+        with open(STARRED_WORDS_FILE, "r") as f:
+            content = f.read()
+            if content:
+                return json.loads(content)
+    return []
+    # --- 수정된 부분 끝 ---
+
+# 별표 단어 목록을 파일에 저장하는 함수
+def save_starred_words(words):
+    with open(STARRED_WORDS_FILE, "w") as f:
+        json.dump([int(i) for i in words], f)
 
 # 세션 상태(session_state)에 저장할 변수 초기화
 if 'random_words' not in st.session_state:
@@ -16,8 +39,7 @@ if 'random_words' not in st.session_state:
 if 'expanded_card_index' not in st.session_state:
     st.session_state.expanded_card_index = -1
 if 'starred_words_indices' not in st.session_state:
-    st.session_state.starred_words_indices = []
-# 퀴즈 관련 상태 초기화
+    st.session_state.starred_words_indices = load_starred_words()
 if 'quiz_state' not in st.session_state:
     st.session_state.quiz_state = {'question_word': None, 'options': [], 'correct_answer': '', 'is_answered': False, 'score': 0}
 if 'quiz_history' not in st.session_state:
@@ -44,6 +66,7 @@ def create_card(word_data, index, column):
                         st.session_state.starred_words_indices.remove(index)
                     else:
                         st.session_state.starred_words_indices.append(index)
+                    save_starred_words(st.session_state.starred_words_indices)
                     st.rerun()
 
             st.markdown("<hr style='margin-top: 0; margin-bottom: 5px; border-top: 1px solid #ddd;'>", unsafe_allow_html=True)
@@ -56,6 +79,13 @@ def create_card(word_data, index, column):
             
             if st.session_state.expanded_card_index == index:
                 st.write("---")
+                
+                tts = gTTS(text=word_data['단어'], lang='en')
+                audio_bytes = io.BytesIO()
+                tts.write_to_fp(audio_bytes)
+                audio_bytes.seek(0)
+                st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+                
                 st.markdown(f"**예문:** {word_data['예문']}", unsafe_allow_html=True)
                 st.markdown(f"**유의어:** {word_data['유의어']}", unsafe_allow_html=True)
 
@@ -63,11 +93,9 @@ def create_card(word_data, index, column):
 def generate_quiz():
     st.session_state.quiz_total_count += 1
     
-    # 정답 단어 무작위 선택
     correct_word_data = df.sample(1).iloc[0]
     correct_answer = correct_word_data['뜻']
     
-    # 오답 3개 무작위 선택
     incorrect_options = df[df['뜻'] != correct_answer].sample(3)['뜻'].tolist()
     
     options = incorrect_options + [correct_answer]
@@ -136,14 +164,12 @@ elif menu_selection == "전체 단어장":
 elif menu_selection == "퀴즈":
     st.title("퀴즈")
 
-    # 퀴즈 상태가 초기화되지 않았으면 문제 생성
     if not st.session_state.quiz_state['question_word']:
         generate_quiz()
 
     st.subheader(f"문제 {st.session_state.quiz_total_count}")
     st.write(f"### **{st.session_state.quiz_state['question_word']}**")
 
-    # 객관식 보기 버튼
     for option in st.session_state.quiz_state['options']:
         if st.button(option, key=option, use_container_width=True):
             if not st.session_state.quiz_state['is_answered']:
