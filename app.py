@@ -10,8 +10,16 @@ import os
 STARRED_WORDS_FILE = "starred_words.json"
 
 # CSV 파일 불러오기
+# 기존 코드
+# df = pd.read_csv('toeic_words.csv')
+
+# 수정 코드 (encoding='cp949' 추가)
 try:
-    df = pd.read_csv('toeic_words.csv')
+    df = pd.read_csv('toeic_words.csv', encoding='cp949')
+    df = df.fillna('')
+except UnicodeDecodeError:
+    # 혹시 UTF-8로 저장되어 있을 경우를 대비한 예외 처리
+    df = pd.read_csv('toeic_words.csv', encoding='utf-8')
     df = df.fillna('')
 except FileNotFoundError:
     st.error("`toeic_words.csv` 파일을 찾을 수 없습니다.")
